@@ -221,6 +221,7 @@ class RtAudio
     MACOSX_CORE,    /*!< Macintosh OS-X Core Audio API. */
     WINDOWS_ASIO,   /*!< The Steinberg Audio Stream I/O API. */
     WINDOWS_DS,     /*!< The Microsoft Direct Sound API. */
+    WINDOWS_RT,     /*!< The Windows Runtime API. */
     RTAUDIO_DUMMY   /*!< A compilable but non-functional API. */
   };
 
@@ -518,6 +519,12 @@ class RtAudio
 #if defined(__WINDOWS_DS__) || defined(__WINDOWS_ASIO__)
   #include <windows.h>
   #include <process.h>
+
+  typedef unsigned long ThreadHandle;
+  typedef CRITICAL_SECTION StreamMutex;
+
+#elif defined(__WINDOWS_RT__)
+  #include <windows.h>
 
   typedef unsigned long ThreadHandle;
   typedef CRITICAL_SECTION StreamMutex;
@@ -921,6 +928,52 @@ public:
                         unsigned int firstChannel, unsigned int sampleRate,
                         RtAudioFormat format, unsigned int *bufferSize,
                         RtAudio::StreamOptions *options );
+};
+
+#endif
+
+#if defined(__WINDOWS_RT__)
+
+#include <collection.h>
+#include <ppltasks.h>
+#include "WASAPIRenderer.h"
+#include "WASAPICapture.h"
+#include <thread>
+
+using namespace SDKSample::WASAPIAudio;
+
+class RtApiWinrt : public RtApi
+{
+public:
+  RtApiWinrt();
+  ~RtApiWinrt();
+  RtAudio::Api getCurrentApi() { return RtAudio::WINDOWS_RT; }
+  unsigned int getDeviceCount(void);
+  RtAudio::DeviceInfo getDeviceInfo(unsigned int device);
+  void closeStream(void);
+  void startStream(void);
+  void stopStream(void);
+  void abortStream( void );
+  long getStreamLatency( void );
+
+private:
+  bool probeDeviceOpen(unsigned int device, StreamMode mode, unsigned int channels,
+    unsigned int firstChannel, unsigned int sampleRate,
+    RtAudioFormat format, unsigned int *bufferSize,
+    RtAudio::StreamOptions *options);
+  void enumerateDevices(void);
+  void callbackEvent(BYTE *audioData, unsigned frames, unsigned bufferSize, bool recording);
+  static void callbackHandler(void *userData, BYTE *audioData, unsigned frames, unsigned bufferSize, bool recording);
+
+  unsigned int deviceCount_;
+  std::vector<RtAudio::DeviceInfo> devices_;
+  
+  ComPtr<WASAPIRenderer> spRenderer_;
+  ComPtr<WASAPICapture>  spCapture_;
+
+  bool mfStarted_;
+  //bool devicesEnumerating_;
+  bool devicesEnumerated_;
 };
 
 #endif
